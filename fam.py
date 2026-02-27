@@ -1,4 +1,5 @@
 import os
+import threading
 import json
 import shutil
 import requests
@@ -52,7 +53,7 @@ class GalleryScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.last_data = None  # store last JSON
+        self.last_data = None
 
         main = BoxLayout(orientation="vertical", spacing=10)
 
@@ -81,38 +82,34 @@ class GalleryScreen(Screen):
         self.add_widget(main)
 
     def on_enter(self):
-        self.load_posts()
-        Clock.schedule_interval(self.auto_refresh, 5)  # every 5 seconds
+        self.start_background_refresh(0)
+        Clock.schedule_interval(self.start_background_refresh, 5)
 
     def on_leave(self):
-        Clock.unschedule(self.auto_refresh)
+        Clock.unschedule(self.start_background_refresh)
 
-    def auto_refresh(self, dt):
+    def start_background_refresh(self, dt):
+        threading.Thread(target=self.fetch_data, daemon=True).start()
+
+    def fetch_data(self):
         try:
-            response = requests.get(f"{BASE_URL}/data.json")
+            response = requests.get(f"{BASE_URL}/data.json", timeout=5)
             data = response.json()
 
             if data != self.last_data:
                 self.last_data = data
-                self.load_posts()
+                Clock.schedule_once(lambda dt: self.load_posts())
 
-        except:
-            pass
+        except Exception as e:
+            print("Fetch error:", e)
 
     def load_posts(self):
         self.grid.clear_widgets()
 
-        try:
-            response = requests.get(f"{BASE_URL}/data.json")
-            data = response.json()
-            self.last_data = data
-        except:
+        if not self.last_data or "posts" not in self.last_data:
             return
 
-        if "posts" not in data:
-            return
-
-        for post in reversed(data["posts"]):
+        for post in reversed(self.last_data["posts"]):
 
             card = BoxLayout(
                 orientation="vertical",
@@ -138,7 +135,6 @@ class GalleryScreen(Screen):
             ))
 
             self.grid.add_widget(card)
-
 
 # ---------------- POST ----------------
 class PostScreen(Screen):
