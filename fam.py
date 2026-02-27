@@ -15,6 +15,7 @@ from kivy.uix.filechooser import FileChooserListView
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.image import AsyncImage
 from kivy.metrics import dp
+from kivy.clock import Clock
 
 
 BASE_URL = "https://corephotos.web.app"
@@ -51,6 +52,8 @@ class GalleryScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+        self.last_data = None  # store last JSON
+
         main = BoxLayout(orientation="vertical", spacing=10)
 
         header = BoxLayout(size_hint_y=None, height=dp(50))
@@ -79,6 +82,22 @@ class GalleryScreen(Screen):
 
     def on_enter(self):
         self.load_posts()
+        Clock.schedule_interval(self.auto_refresh, 5)  # every 5 seconds
+
+    def on_leave(self):
+        Clock.unschedule(self.auto_refresh)
+
+    def auto_refresh(self, dt):
+        try:
+            response = requests.get(f"{BASE_URL}/data.json")
+            data = response.json()
+
+            if data != self.last_data:
+                self.last_data = data
+                self.load_posts()
+
+        except:
+            pass
 
     def load_posts(self):
         self.grid.clear_widgets()
@@ -86,10 +105,11 @@ class GalleryScreen(Screen):
         try:
             response = requests.get(f"{BASE_URL}/data.json")
             data = response.json()
+            self.last_data = data
         except:
             return
 
-        if not data or "posts" not in data:
+        if "posts" not in data:
             return
 
         for post in reversed(data["posts"]):
