@@ -93,7 +93,7 @@ class GalleryScreen(Screen):
             try:
                 with open(self.CACHE_FILE, "r") as f:
                     self.last_data = json.load(f)
-                    self.load_posts()
+                    self.load_posts()  # safe now, unpost button will only show if current_user exists
             except Exception as e:
                 print("Error loading cached JSON:", e)
 
@@ -169,7 +169,44 @@ class GalleryScreen(Screen):
                 height=dp(40)
             ))
 
+            # Show delete button only if current_user exists and matches post
+            if getattr(self.manager, "current_user", None) and post["user"] == self.manager.current_user:
+                from kivy.uix.button import Button
+                delete_btn = Button(
+                    text="Unpost",
+                    size_hint_y=None,
+                    height=dp(40)
+                )
+                delete_btn.bind(on_press=lambda btn, p=post: self.unpost_photo(p))
+                card.add_widget(delete_btn)
+
             self.grid.add_widget(card)
+
+    def unpost_photo(self, post):
+        # Remove post from last_data
+        self.last_data["posts"] = [
+            p for p in self.last_data["posts"] if p["image"] != post["image"]
+        ]
+
+        # Delete local image file
+        image_path = os.path.join(IMAGES_FOLDER, post["image"])
+        if os.path.exists(image_path):
+            os.remove(image_path)
+
+        # Save updated JSON
+        self.save_cache()
+        with open(DATA_FILE, "w") as f:
+            json.dump(self.last_data, f, indent=4)
+
+        # Git push in background
+        import threading
+        threading.Thread(target=lambda: os.system(
+            'git add . && git commit -m "Photo unposted" && git push origin main'
+        ), daemon=True).start()
+
+        # Refresh gallery
+        self.load_posts()
+
 # ---------------- POST ----------------
 class PostScreen(Screen):
     def __init__(self, **kwargs):
@@ -214,6 +251,30 @@ class PostScreen(Screen):
         file_path = self.filechooser.selection[0]
         filename = os.path.basename(file_path)
 
+        # Load current posts
+        if os.path.exists(DATA_FILE):
+            with open(DATA_FILE, "r") as f:
+                data = json.load(f)
+        else:
+            data = {"posts": []}
+
+        # Check for duplicates
+        for post in data["posts"]:
+            if post["image"] == filename:
+                # Found duplicate
+                existing_user = post["user"]
+                from kivy.uix.popup import Popup
+                popup = Popup(
+                    title="Duplicate Photo",
+                    content=Label(
+                        text=f"This photo was already posted by {existing_user}.\nDo you want to add a comment instead?"
+                    ),
+                    size_hint=(0.8, 0.3)
+                )
+                popup.open()
+                return  # stop posting
+
+        # No duplicates → continue posting
         if not os.path.exists(IMAGES_FOLDER):
             os.makedirs(IMAGES_FOLDER)
 
@@ -228,18 +289,12 @@ class PostScreen(Screen):
             "timestamp": str(datetime.now())
         }
 
-        if not os.path.exists(DATA_FILE):
-            with open(DATA_FILE, "w") as f:
-                json.dump({"posts": []}, f)
-
-        with open(DATA_FILE, "r") as f:
-            data = json.load(f)
-
         data["posts"].append(post)
 
         with open(DATA_FILE, "w") as f:
             json.dump(data, f, indent=4)
 
+        # Git push
         os.system("git add .")
         os.system('git commit -m "New family post"')
         os.system("git push origin main")
