@@ -1,5 +1,6 @@
 import os
 import threading
+import time
 import json
 import shutil
 import requests
@@ -50,10 +51,13 @@ class LoginScreen(Screen):
 
 # ---------------- GALLERY ----------------
 class GalleryScreen(Screen):
+    CACHE_FILE = "data_cache.json"  # local cached JSON
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
         self.last_data = None
+        self.poll_count = 0
 
         main = BoxLayout(orientation="vertical", spacing=10)
 
@@ -81,28 +85,59 @@ class GalleryScreen(Screen):
 
         self.add_widget(main)
 
+        # Load cached data if exists
+        self.load_cached_data()
+    
+    def load_cached_data(self):
+        if os.path.exists(self.CACHE_FILE):
+            try:
+                with open(self.CACHE_FILE, "r") as f:
+                    self.last_data = json.load(f)
+                    self.load_posts()
+            except Exception as e:
+                print("Error loading cached JSON:", e)
+
+    def save_cache(self):
+        try:
+            with open(self.CACHE_FILE, "w") as f:
+                json.dump(self.last_data, f)
+        except Exception as e:
+            print("Error saving cache:", e)
+
     def on_enter(self):
-        # Load initial posts
-        self.fetch_data()
+        # Delay fetch by 1s to allow app to load first
+        Clock.schedule_once(lambda dt: threading.Thread(target=self.fetch_data, daemon=True).start(), 1)
 
     def on_post_button_press(self, instance):
-        # Open post screen or upload logic
+        # Open post screen
         self.manager.current = "post"
 
-        # After a post is made, reload immediately
+        # After posting, poll 2 times with 6s interval
+        self.poll_count = 0
+        Clock.schedule_interval(self.poll_after_post, 6)
+
+    def poll_after_post(self, dt):
+        if self.poll_count >= 2:
+            return False  # stop scheduling
         threading.Thread(target=self.fetch_data, daemon=True).start()
+        self.poll_count += 1
+        return True
 
     def fetch_data(self):
-        try:
-            response = requests.get(f"{BASE_URL}/data.json", timeout=5)
-            data = response.json()
+        retries = 3
+        for attempt in range(retries):
+            try:
+                response = requests.get(f"{BASE_URL}/data.json", timeout=10)
+                data = response.json()
 
-            if data != self.last_data:
-                self.last_data = data
-                Clock.schedule_once(lambda dt: self.load_posts())
-
-        except Exception as e:
-            print("Fetch error:", e)
+                if data != self.last_data:
+                    self.last_data = data
+                    Clock.schedule_once(lambda dt: self.load_posts())
+                    self.save_cache()  # save updated data locally
+                break
+            except Exception as e:
+                print(f"Fetch attempt {attempt+1} failed:", e)
+                time.sleep(2)  # wait before retry
 
     def load_posts(self):
         self.grid.clear_widgets()
