@@ -86,14 +86,14 @@ class GalleryScreen(Screen):
         self.add_widget(main)
 
         # Load cached data if exists
-        self.load_cached_data()
+        
     
     def load_cached_data(self):
         if os.path.exists(self.CACHE_FILE):
             try:
                 with open(self.CACHE_FILE, "r") as f:
                     self.last_data = json.load(f)
-                    self.load_posts()  # safe now, unpost button will only show if current_user exists
+                    self.load_posts()
             except Exception as e:
                 print("Error loading cached JSON:", e)
 
@@ -105,8 +105,17 @@ class GalleryScreen(Screen):
             print("Error saving cache:", e)
 
     def on_enter(self):
+        # Load cached data AFTER manager exists
+        self.load_cached_data()
+
         # Delay fetch by 1s to allow app to load first
-        Clock.schedule_once(lambda dt: threading.Thread(target=self.fetch_data, daemon=True).start(), 1)
+        Clock.schedule_once(
+            lambda dt: threading.Thread(
+                target=self.fetch_data,
+                daemon=True
+            ).start(),
+            1
+        )
 
     def on_post_button_press(self, instance):
         # Open post screen
@@ -169,42 +178,48 @@ class GalleryScreen(Screen):
                 height=dp(40)
             ))
 
-            # Show delete button only if current_user exists and matches post
-            if getattr(self.manager, "current_user", None) and post["user"] == self.manager.current_user:
-                from kivy.uix.button import Button
+            current_user = getattr(self.manager, "current_user", None)
+
+            if current_user and post["user"] == current_user:
                 delete_btn = Button(
                     text="Unpost",
                     size_hint_y=None,
                     height=dp(40)
                 )
-                delete_btn.bind(on_press=lambda btn, p=post: self.unpost_photo(p))
+                delete_btn.bind(
+                    on_press=lambda btn, p=post: self.unpost_photo(p)
+                )
                 card.add_widget(delete_btn)
 
             self.grid.add_widget(card)
 
     def unpost_photo(self, post):
-        # Remove post from last_data
-        self.last_data["posts"] = [
-            p for p in self.last_data["posts"] if p["image"] != post["image"]
-        ]
+        # Load current data
+        if os.path.exists(DATA_FILE):
+            with open(DATA_FILE, "r") as f:
+                data = json.load(f)
+        else:
+            return
 
-        # Delete local image file
+        # Remove post
+        data["posts"] = [p for p in data["posts"] if p != post]
+
+        # Remove image file if exists
         image_path = os.path.join(IMAGES_FOLDER, post["image"])
         if os.path.exists(image_path):
             os.remove(image_path)
 
-        # Save updated JSON
-        self.save_cache()
+        # Save updated data
         with open(DATA_FILE, "w") as f:
-            json.dump(self.last_data, f, indent=4)
+            json.dump(data, f, indent=4)
 
-        # Git push in background
-        import threading
-        threading.Thread(target=lambda: os.system(
-            'git add . && git commit -m "Photo unposted" && git push origin main'
-        ), daemon=True).start()
+        # Optionally push to Git
+        os.system("git add .")
+        os.system('git commit -m "Removed a post"')
+        os.system("git push origin main")
 
-        # Refresh gallery
+        # Refresh UI
+        self.last_data = data
         self.load_posts()
 
 # ---------------- POST ----------------
