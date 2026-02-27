@@ -61,7 +61,7 @@ class GalleryScreen(Screen):
         header.add_widget(Label(text="Family Gallery", font_size=20))
 
         new_post_btn = Button(text="+ Post", size_hint_x=0.3)
-        new_post_btn.bind(on_press=lambda x: setattr(self.manager, "current", "post"))
+        new_post_btn.bind(on_press=self.on_post_button_press)
         header.add_widget(new_post_btn)
 
         main.add_widget(header)
@@ -82,13 +82,14 @@ class GalleryScreen(Screen):
         self.add_widget(main)
 
     def on_enter(self):
-        self.start_background_refresh(0)
-        Clock.schedule_interval(self.start_background_refresh, 5)
+        # Load initial posts
+        self.fetch_data()
 
-    def on_leave(self):
-        Clock.unschedule(self.start_background_refresh)
+    def on_post_button_press(self, instance):
+        # Open post screen or upload logic
+        self.manager.current = "post"
 
-    def start_background_refresh(self, dt):
+        # After a post is made, reload immediately
         threading.Thread(target=self.fetch_data, daemon=True).start()
 
     def fetch_data(self):
@@ -110,7 +111,6 @@ class GalleryScreen(Screen):
             return
 
         for post in reversed(self.last_data["posts"]):
-
             card = BoxLayout(
                 orientation="vertical",
                 size_hint_y=None,
@@ -135,7 +135,6 @@ class GalleryScreen(Screen):
             ))
 
             self.grid.add_widget(card)
-
 # ---------------- POST ----------------
 class PostScreen(Screen):
     def __init__(self, **kwargs):
