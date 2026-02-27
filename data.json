@@ -1,0 +1,39 @@
+{
+    "posts": [
+        {
+            "user": "garvin",
+            "image": "IMG_9752.jpg",
+            "description": "tt",
+            "category": "tttt",
+            "timestamp": "2026-02-27 18:04:41.531467"
+        },
+        {
+            "user": "garvin",
+            "image": "IMG_9752.jpg",
+            "description": "ff",
+            "category": "fff",
+            "timestamp": "2026-02-27 19:49:22.266257"
+        },
+        {
+            "user": "garvin",
+            "image": "IMG_9752.jpg",
+            "description": "test",
+            "category": "try",
+            "timestamp": "2026-02-27 19:55:00.348324"
+        },
+        {
+            "user": "garvin",
+            "image": "IMG_9752.jpg",
+            "description": "test",
+            "category": "try",
+            "timestamp": "2026-02-27 19:55:56.721204"
+        },
+        {
+            "user": "garvin",
+            "image": "IMG_9752.jpg",
+            "description": "test",
+            "category": "try",
+            "timestamp": "2026-02-27 19:57:01.473954"
+        }
+    ]
+}
